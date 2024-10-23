@@ -8,6 +8,10 @@ public class Sheep : MonoBehaviour
     [SerializeField] private GameObject destination;
     [SerializeField] private NavMeshAgent agent;
 
+    [SerializeField] private Animator animator;
+
+    [SerializeField] private GameObject target;
+
     [SerializeField] private bool isAngekommen;
     [SerializeField] private bool isUnterwegs;
 
@@ -15,7 +19,7 @@ public class Sheep : MonoBehaviour
     {
         agent.SetDestination(destination.transform.position);
 
-        StartCoroutine(Test());
+        StartCoroutine(ChooseNewTarget());
     }
 
     private void Update()
@@ -30,23 +34,28 @@ public class Sheep : MonoBehaviour
                     {
                         isAngekommen = true;
                         isUnterwegs = false;
+
+                        if (target != null)
+                        {
+                            Destroy(target);
+                        }
+
+                        animator.Play("Eating");
                     }
                 }
             }
         }
     }
 
-    public IEnumerator Test()
+    public IEnumerator ChooseNewTarget()
     {
         while (true)
         {
-         
-
             GameObject[] grass = GameObject.FindGameObjectsWithTag("Grass");
             GameObject[] wasser = GameObject.FindGameObjectsWithTag("Wasser");
 
 
-            if (grass.Length > 0 && !isUnterwegs)
+            if (!isUnterwegs)
             {
                 isUnterwegs = true;
                 isAngekommen = false;
@@ -59,13 +68,18 @@ public class Sheep : MonoBehaviour
                 if (randomZahl < 1)
                 {
                     agent.SetDestination(randomWasser.transform.position);
-                    
+                    animator.Play("Walking");
+
                     Debug.Log("Wasser");
                 }
 
                 if (randomZahl >= 1)
                 {
                     agent.SetDestination(randomGrass.transform.position);
+                    animator.Play("Walking");
+
+                    target = randomGrass;
+
                     Debug.Log("Grass");
                 }
 
