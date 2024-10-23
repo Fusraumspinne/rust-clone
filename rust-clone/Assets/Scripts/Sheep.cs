@@ -9,6 +9,7 @@ public class Sheep : MonoBehaviour
     [SerializeField] private NavMeshAgent agent;
 
     [SerializeField] private bool isAngekommen;
+    [SerializeField] private bool isUnterwegs;
 
     public void Start()
     {
@@ -28,6 +29,7 @@ public class Sheep : MonoBehaviour
                     if (!agent.hasPath || agent.velocity.sqrMagnitude == 0f)
                     {
                         isAngekommen = true;
+                        isUnterwegs = false;
                     }
                 }
             }
@@ -38,24 +40,41 @@ public class Sheep : MonoBehaviour
     {
         while (true)
         {
-            Debug.Log("Hallo");
+         
 
             GameObject[] grass = GameObject.FindGameObjectsWithTag("Grass");
+            GameObject[] wasser = GameObject.FindGameObjectsWithTag("Wasser");
 
-            foreach (GameObject grassObject in grass)
+
+            if (grass.Length > 0 && !isUnterwegs)
             {
-                Debug.Log(grassObject.name);
+                isUnterwegs = true;
+                isAngekommen = false;
+                
+                GameObject randomGrass = grass[Random.Range(0, grass.Length)];
+                GameObject randomWasser = wasser[Random.Range(0, wasser.Length)];
+
+                float randomZahl = Random.Range(0, 10);
+
+                if (randomZahl < 1)
+                {
+                    agent.SetDestination(randomWasser.transform.position);
+                    
+                    Debug.Log("Wasser");
+                }
+
+                if (randomZahl >= 1)
+                {
+                    agent.SetDestination(randomGrass.transform.position);
+                    Debug.Log("Grass");
+                }
+
             }
 
             yield return new WaitForSeconds(Random.Range(2f, 5f));
         }
     }
 
-    bool IsReachable(Vector3 targetPosition)
-    {
-        NavMeshPath path = new NavMeshPath();
-        agent.CalculatePath(targetPosition, path);
-
-        return path.status == NavMeshPathStatus.PathComplete;
-    }
 }
+
+
