@@ -19,9 +19,16 @@ public class Sheep : MonoBehaviour
     [SerializeField] private bool isUnterwegs;
     [SerializeField] private bool Setzen;
 
+    public int maxHealth = 100;
+    public int currentHealth;
+    public healthbarscript HealthBar;
+
     public void Start()
     {
         StartCoroutine(ChooseNewTarget());
+
+        currentHealth = maxHealth;
+        HealthBar.SetMaxHealth(maxHealth);
     }
 
     private void Update()
@@ -50,6 +57,17 @@ public class Sheep : MonoBehaviour
                 }
             }
         }
+
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            TakeDamage(20);
+        }
+    }
+
+    void TakeDamage(int damage)
+    {
+        currentHealth -= damage;
+        HealthBar.SetHealth(currentHealth);
     }
 
     private IEnumerator Eat()
