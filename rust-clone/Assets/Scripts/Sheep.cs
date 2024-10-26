@@ -1,44 +1,51 @@
+using System;
 using System.Collections;
-using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
 
-public class Sheep : MonoBehaviour
+public class Sheep : NetworkBehaviour
 {
     [SerializeField] private GameObject destination;
     [SerializeField] private NavMeshAgent agent;
-
     [SerializeField] private Animator animator;
-
     [SerializeField] private GameObject target;
 
-    private enum State { Idle, Walking, Eating, Drinking, Resting }
-    private State currentState = State.Idle;
+    private enum State { Idle, Walking, Eating, Drinking, Resting, Dead }
+    private NetworkVariable<State> currentState = new NetworkVariable<State>(State.Idle);
 
     [SerializeField] private bool isAngekommen;
     [SerializeField] private bool isUnterwegs;
     [SerializeField] private bool Setzen;
 
     public int maxHealth = 100;
-    public int currentHealth;
+    private NetworkVariable<int> currentHealth = new NetworkVariable<int>();
+
     public healthbarscript HealthBar;
+    public GameObject healthBar;
 
-    public void Start()
+    public override void OnNetworkSpawn()
     {
-        StartCoroutine(ChooseNewTarget());
+        if (IsServer)
+        {
+            currentHealth.Value = maxHealth;
+            StartCoroutine(ChooseNewTarget());
+        }
 
-        currentHealth = maxHealth;
         HealthBar.SetMaxHealth(maxHealth);
+        currentHealth.OnValueChanged += (oldValue, newValue) => HealthBar.SetHealth(newValue);
     }
 
     private void Update()
     {
-        if (currentState == State.Walking && agent.remainingDistance <= agent.stoppingDistance)
+        if (!IsOwner) return;
+
+        if (currentState.Value == State.Walking && agent.remainingDistance <= agent.stoppingDistance)
         {
             if (!agent.hasPath || agent.velocity.sqrMagnitude == 0f)
             {
                 isAngekommen = true;
-                currentState = State.Idle;
+                currentState.Value = State.Idle;
 
                 if (target != null)
                 {
@@ -58,85 +65,135 @@ public class Sheep : MonoBehaviour
             }
         }
 
-        if (Input.GetKeyDown(KeyCode.Space))
+        if (currentHealth.Value <= 0)
         {
-            TakeDamage(20);
+            currentState.Value = State.Dead;
+
+            agent.enabled = false;
+
+            DisableHealthBarClientRpc();
+        }
+
+        SyncAnimation();
+    }
+
+    [ClientRpc]
+    private void DisableHealthBarClientRpc()
+    {
+        healthBar.SetActive(false);
+    }
+
+    private void SyncAnimation()
+    {
+        if (currentState.Value == State.Walking)
+        {
+            animator.Play("Walking");
+        }
+        else if (currentState.Value == State.Eating)
+        {
+            animator.Play("Eating");
+        }
+        else if (currentState.Value == State.Drinking)
+        {
+            animator.Play("Eating");
+        }
+        else if (currentState.Value == State.Resting)
+        {
+            animator.Play("Setzten");
+        }
+        else if (currentState.Value == State.Dead)
+        {
+            animator.Play("Tot");
         }
     }
 
-    void TakeDamage(int damage)
+    private void OnMouseDown()
     {
-        currentHealth -= damage;
-        HealthBar.SetHealth(currentHealth);
+        if (currentHealth.Value > 0)
+        {
+            if (IsServer)
+            {
+                TakeDamage(10);
+            }
+            else
+            {
+                TakeDamageServerRpc(10); 
+            }
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    void TakeDamageServerRpc(int damage)
+    {
+        TakeDamage(damage); 
+    }
+
+    private void TakeDamage(int damage)
+    {
+        currentHealth.Value -= damage;
     }
 
     private IEnumerator Eat()
     {
-        currentState = State.Eating;
-        animator.Play("Eating");
+        currentState.Value = State.Eating;
         Debug.Log("Schaf isst.");
-        yield return new WaitForSeconds(7); 
-        Destroy(target); 
-        currentState = State.Idle;
+        yield return new WaitForSeconds(7);
+        if (IsServer) Destroy(target);
+        currentState.Value = State.Idle;
     }
 
     private IEnumerator Drink()
     {
-        currentState = State.Drinking;
-        animator.Play("Eating");
+        currentState.Value = State.Drinking;
         Debug.Log("Schaf trinkt.");
-        yield return new WaitForSeconds(Random.Range(4, 10)); // Simuliere Trinkdauer
-        currentState = State.Idle;
+        yield return new WaitForSeconds(UnityEngine.Random.Range(4, 10));
+        currentState.Value = State.Idle;
     }
 
     private IEnumerator Rest()
     {
-        currentState = State.Resting;
-        animator.Play("setzen");
+        currentState.Value = State.Resting;
         Debug.Log("Schaf setzt sich aus.");
-        yield return new WaitForSeconds(Random.Range(4, 30)); // Simuliere Ruhezeit ///////////////////////////
-        animator.Play("aufstehen");
+        yield return new WaitForSeconds(UnityEngine.Random.Range(4, 30));
+        animator.Play("Aufstehen");
         yield return new WaitForSeconds(2);
         Setzen = false;
-        currentState = State.Idle;
+        currentState.Value = State.Idle;
     }
 
     public IEnumerator ChooseNewTarget()
     {
         while (true)
         {
-            if (currentState == State.Idle)
+            if (currentState.Value == State.Idle && currentState.Value != State.Dead)
             {
                 GameObject[] grass = GameObject.FindGameObjectsWithTag("Grass");
                 GameObject[] wasser = GameObject.FindGameObjectsWithTag("Wasser");
 
                 isAngekommen = false;
-                float randomZahl = Random.Range(0, 30);
+                float randomZahl = UnityEngine.Random.Range(0, 30);
 
                 if (randomZahl < 5)
                 {
-                    GameObject randomWasser = wasser[Random.Range(0, wasser.Length)];
+                    GameObject randomWasser = wasser[UnityEngine.Random.Range(0, wasser.Length)];
                     agent.SetDestination(randomWasser.transform.position);
-                    animator.Play("Walking");
                     target = randomWasser;
-                    currentState = State.Walking;
+                    currentState.Value = State.Walking;
                     Debug.Log("Schaf geht zum Wasser.");
                 }
                 else if (randomZahl >= 5 && randomZahl <= 10)
                 {
-                    GameObject randomGrass = grass[Random.Range(0, grass.Length)];
+                    GameObject randomGrass = grass[UnityEngine.Random.Range(0, grass.Length)];
                     agent.SetDestination(randomGrass.transform.position);
-                    animator.Play("Walking");
                     target = randomGrass;
-                    currentState = State.Walking;
+                    currentState.Value = State.Walking;
                     Debug.Log("Schaf geht zum Gras.");
                 }
                 else
                 {
                     Vector3 randomPoint = GetRandomPointAround(transform.position, 20f);
                     agent.SetDestination(randomPoint);
-                    animator.Play("Walking");
-                    currentState = State.Walking;
+                    currentState.Value = State.Walking;
                     Setzen = true;
                     Debug.Log("Schaf sucht sich einen Ruheplatz.");
                 }
@@ -148,7 +205,7 @@ public class Sheep : MonoBehaviour
 
     private Vector3 GetRandomPointAround(Vector3 center, float range)
     {
-        Vector3 randomDirection = Random.insideUnitSphere * range;
+        Vector3 randomDirection = UnityEngine.Random.insideUnitSphere * range;
         randomDirection += center;
 
         NavMeshHit hit;
@@ -160,4 +217,3 @@ public class Sheep : MonoBehaviour
         return center;
     }
 }
-
