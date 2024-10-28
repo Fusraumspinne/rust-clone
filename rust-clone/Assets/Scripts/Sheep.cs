@@ -182,7 +182,18 @@ public class Sheep : NetworkBehaviour
     private void TakeDamage(int damage)
     {
         currentHealth.Value -= damage;
+        if (currentHealth.Value > 0 && currentState.Value != State.Running && currentState.Value != State.Dead)
+        {
+            StartCoroutine(RunAwayAfterDamage());
+        }
     }
+
+    private IEnumerator RunAwayAfterDamage()
+    {
+        currentState.Value = State.Running;
+        yield return Rennen();
+    }
+
 
     private IEnumerator Eat()
     {
